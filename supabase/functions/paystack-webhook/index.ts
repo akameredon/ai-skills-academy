@@ -1,36 +1,247 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-async function hmacSha512(secret: string, body: string) {
- const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
- const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
- return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-function safeEqual(a: string, b: string) {
- if (a.length !== b.length) return false;
- let result = 0;
- for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
- return result === 0;
-}
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const allowedPathways = new Set([
+  'video',
+  'graphics',
+  'prompting',
+  'websites',
+  'digital-products',
+]);
+
+const json = (
+  body: unknown,
+  status = 200,
+  origin = '',
+) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Headers':
+        'authorization, x-client-info, apikey, content-type',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Vary': 'Origin',
+      'Content-Type': 'application/json',
+    },
+  });
+
 Deno.serve(async (req) => {
- if (req.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
- const secret = Deno.env.get('PAYSTACK_SECRET_KEY');
- const url = Deno.env.get('SUPABASE_URL');
- const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
- if (!secret || !url || !serviceKey) return json({ error: 'Webhook is not configured.' }, 503);
- const rawBody = await req.text();
- const signature = req.headers.get('x-paystack-signature') ?? '';
- const expected = await hmacSha512(secret, rawBody);
- if (!signature || !safeEqual(signature, expected)) return json({ error: 'Invalid signature.' }, 401);
- let event: { event?: string; data?: { reference?: string } };
- try { event = JSON.parse(rawBody); } catch { return json({ error: 'Invalid JSON.' }, 400); }
- if (event.event !== 'charge.success' || !event.data?.reference) return json({ received: true });
- // Verify with Paystack directly before granting access.
- const verifyResponse = await fetch('https://api.paystack.co/transaction/verify/' + encodeURIComponent(event.data.reference), { headers: { Authorization: 'Bearer ' + secret } });
- const verified = await verifyResponse.json().catch(() => ({}));
- if (!verifyResponse.ok || !verified.status || verified.data?.status !== 'success') return json({ error: 'Payment verification failed.' }, 400);
- const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
- const { data, error } = await admin.rpc('apply_verified_payment', { p_reference: event.data.reference, p_amount_kobo: verified.data.amount, p_currency: verified.data.currency, p_provider_status: verified.data.status });
- if (error) { console.error('Payment apply failed:', error.message); return json({ error: 'Payment received but membership update needs retry.' }, 500); }
- return json({ received: true, applied: data });
+  const siteUrl = Deno.env.get('SITE_URL');
+  const configuredOrigin = (() => {
+    try {
+      return siteUrl ? new URL(siteUrl).origin : '';
+    } catch {
+      return '';
+    }
+  })();
+
+  const requestOrigin = req.headers.get('Origin') ?? '';
+  const originAllowed =
+    !!configuredOrigin &&
+    (!requestOrigin || requestOrigin === configuredOrigin);
+
+  const responseOrigin =
+    requestOrigin && originAllowed ? requestOrigin : configuredOrigin;
+
+  if (req.method === 'OPTIONS') {
+    if (!originAllowed) {
+      return new Response('Origin not allowed.', { status: 403 });
+    }
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': responseOrigin,
+        'Access-Control-Allow-Headers':
+          'authorization, x-client-info, apikey, content-type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Vary': 'Origin',
+      },
+    });
+  }
+
+  if (req.method !== 'POST') {
+    return json({ error: 'Method not allowed.' }, 405, responseOrigin);
+  }
+
+  if (!originAllowed) {
+    return json({ error: 'Checkout origin is not allowed.' }, 403, configuredOrigin);
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const paystackKey = Deno.env.get('PAYSTACK_SECRET_KEY');
+
+  if (!supabaseUrl || !anonKey || !serviceKey || !paystackKey || !siteUrl) {
+    return json(
+      { error: 'Checkout is not configured yet. Ask the site administrator to finish payment setup.' },
+      503,
+      responseOrigin,
+    );
+  }
+
+  const authorization = req.headers.get('Authorization');
+  if (!authorization) {
+    return json({ error: 'Please sign in before checking out.' }, 401, responseOrigin);
+  }
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authorization } },
+  });
+
+  const {
+    data: { user },
+    error: authError,
+  } = await userClient.auth.getUser();
+
+  if (authError || !user?.email) {
+    return json({ error: 'Your session is invalid. Sign in again.' }, 401, responseOrigin);
+  }
+
+  let payload: { pathwayIds?: unknown; mentorship?: unknown };
+
+  try {
+    payload = await req.json();
+  } catch {
+    return json({ error: 'Invalid checkout request.' }, 400, responseOrigin);
+  }
+
+  if (
+    !Array.isArray(payload.pathwayIds) ||
+    typeof payload.mentorship !== 'boolean'
+  ) {
+    return json(
+      { error: 'Choose at least one course or mentorship before checkout.' },
+      400,
+      responseOrigin,
+    );
+  }
+
+  if (
+    payload.pathwayIds.some((id) => typeof id !== 'string')
+  ) {
+    return json({ error: 'Your selection includes an invalid course.' }, 400, responseOrigin);
+  }
+
+  const pathwayIds = [...new Set(payload.pathwayIds as string[])];
+
+  if (pathwayIds.some((id) => !allowedPathways.has(id))) {
+    return json({ error: 'Your selection includes an invalid course.' }, 400, responseOrigin);
+  }
+
+  if (pathwayIds.length === 0 && !payload.mentorship) {
+    return json(
+      { error: 'Select at least one course or mentorship before checkout.' },
+      400,
+      responseOrigin,
+    );
+  }
+
+  // ₦5,000 per course, plus ₦10,000 if mentorship is selected.
+  // No base fee. Calculate prices on the server, never in the browser.
+  const amountNaira =
+    pathwayIds.length * 5000 + (payload.mentorship ? 10000 : 0);
+
+  const admin = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data: order, error: orderError } = await admin
+    .from('orders')
+    .insert({
+      user_id: user.id,
+      email: user.email,
+      pathway_ids: pathwayIds,
+      mentorship: payload.mentorship,
+      amount_naira: amountNaira,
+      currency: 'NGN',
+      status: 'pending',
+    })
+    .select('id, amount_naira')
+    .single();
+
+  if (orderError || !order) {
+    console.error('Order creation failed:', orderError?.message);
+    return json({ error: 'We could not prepare your order. Please try again.' }, 500, responseOrigin);
+  }
+
+  const reference =
+    `asa_${order.id.replaceAll('-', '')}_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
+
+  const { error: refError } = await admin
+    .from('orders')
+    .update({ provider_reference: reference })
+    .eq('id', order.id)
+    .eq('user_id', user.id);
+
+  if (refError) {
+    console.error('Payment reference save failed:', refError.message);
+    return json({ error: 'We could not prepare your payment reference.' }, 500, responseOrigin);
+  }
+
+  const callbackUrl = new URL('/', siteUrl);
+  callbackUrl.searchParams.set('payment', 'return');
+  callbackUrl.searchParams.set('reference', reference);
+
+  try {
+    const response = await fetch(
+      'https://api.paystack.co/transaction/initialize',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${paystackKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: user.email,
+          amount: order.amount_naira * 100,
+          currency: 'NGN',
+          reference,
+          callback_url: callbackUrl.toString(),
+          metadata: {
+            order_id: order.id,
+            user_id: user.id,
+            pathway_ids: pathwayIds,
+            mentorship: payload.mentorship,
+          },
+        }),
+      },
+    );
+
+    const paystack = await response.json().catch(() => ({}));
+
+    if (
+      !response.ok ||
+      !paystack.status ||
+      !paystack.data?.authorization_url
+    ) {
+      await admin
+        .from('orders')
+        .update({ status: 'failed' })
+        .eq('id', order.id);
+
+      console.error('Paystack initialize failed:', paystack.message ?? response.status);
+
+      return json(
+        { error: 'The payment provider could not start checkout. Please try again later.' },
+        502,
+        responseOrigin,
+      );
+    }
+
+    return json(
+      { checkoutUrl: paystack.data.authorization_url, reference },
+      200,
+      responseOrigin,
+    );
+  } catch (error) {
+    console.error('Paystack request failed:', error instanceof Error ? error.message : 'Unknown error');
+
+    return json(
+      { error: 'We could not contact the payment provider. Please try again later.' },
+      502,
+      responseOrigin,
+    );
+  }
 });
