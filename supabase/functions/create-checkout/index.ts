@@ -22,8 +22,14 @@ Deno.serve(async (req) => {
  if (!Array.isArray(payload.pathwayIds) || typeof payload.mentorship !== 'boolean') return json({ error: 'Choose pathways and mentorship before checkout.' }, 400);
  const pathwayIds = [...new Set(payload.pathwayIds)];
  if (pathwayIds.some((id) => typeof id !== 'string' || !allowedPathways.has(id))) return json({ error: 'Your selection includes an invalid pathway.' }, 400);
- // Server-side amount calculation: never accept a price supplied by the browser.
- const amountNaira = 5000 + pathwayIds.length * 5000 + (payload.mentorship ? 10000 : 0);
+// Server-side amount calculation: never accept a price supplied by the browser.
+  if (pathwayIds.length === 0 && !payload.mentorship) {
+    return json({ error: 'Choose at least one pathway or Mentorship Plus.' }, 400);
+  }
+
+  const amountNaira =
+    pathwayIds.length * 5000 +
+    (payload.mentorship ? 10000 : 0);
  const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
  const { data: order, error: orderError } = await admin.from('orders').insert({ user_id: user.id, email: user.email, pathway_ids: pathwayIds, mentorship: payload.mentorship, amount_naira: amountNaira, currency: 'NGN', status: 'pending' }).select('id, amount_naira').single();
  if (orderError || !order) { console.error('Order creation failed:', orderError?.message); return json({ error: 'We could not prepare your order. Please try again.' }, 500); }
