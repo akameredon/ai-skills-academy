@@ -1,22 +1,26 @@
-# AI Skills Academy — MVP starter
+# AI Skills Academy
 
-A mobile-friendly React/Vite landing page for an AI learning academy. The current scaffold includes five learning pathways, an estimated membership price calculator, Supabase email sign-up, configurable Selar checkout URLs, and an introductory section for future course creators and community partners.
+Responsive React/Vite learning academy with five AI learning pathways, Supabase authentication, server-calculated checkout pricing and Paystack checkout integration.
 
-## Current functionality
+## Included in this update
 
-- Five learning pathways: AI video, graphics and design, prompt engineering, AI-assisted websites, and digital products.
-- Pricing calculator: Foundation ₦5,000/month, +₦5,000/month per selected pathway, optional Mentorship Plus +₦10,000/month.
-- Supabase sign-up form when environment variables are configured.
-- Checkout redirects only when a matching Selar URL is configured.
-- Responsive mobile-first styling.
+- Five selectable pathways and optional Mentorship Plus.
+- Shared pricing rules: NGN 5,000 foundation + NGN 5,000 per selected pathway + NGN 10,000 mentorship.
+- Supabase email sign-up/sign-in and saved member selections.
+- Supabase Edge Function authenticates the member, calculates the amount on the server, creates an order and initializes Paystack checkout.
+- Webhook validates Paystack's HMAC signature, independently verifies the transaction with Paystack, and calls a database function that checks reference/amount and grants access idempotently.
+- Row-level security on orders, payment records and pathway access.
+- Verified payments grant 30 days of access; another successful payment extends access by 30 days.
 
-## Not implemented yet
+## Launch limitations
 
-The current repository is an MVP starter, not a launched production marketplace. Member sign-in, saved selections, course upload/submission, public creator aliases, creator dashboards, referral tracking, payment verification, automated commissions/payouts, course access control, mentor scheduling and admin moderation are not implemented in this version. The creator/partner section is informational only. Do not advertise those features as live until built and tested.
+**Not production-ready until the configuration and tests below are completed.** No real/test payment was run as part of this code change. Checkout is a one-time payment for a 30-day access period and does **not** automatically renew. Refund/reversal automation, auto-renewing subscriptions, course-content delivery, admin tools, creator publishing, affiliate tracking and payouts are not implemented.
+
+Pricing currently means NGN 5,000 foundation + NGN 5,000 per selected pathway + NGN 10,000 mentorship. Confirm this rule before launch.
 
 ## Local setup
 
-Requirements: Node.js 20+ and npm.
+Requires Node.js 20+ and npm.
 
 ```bash
 cp .env.example .env.local
@@ -24,11 +28,19 @@ npm install
 npm run dev
 ```
 
-Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env.local` to enable sign-up. Run `supabase/schema.sql` in the SQL Editor of a new Supabase project. The current UI does not yet save membership selections to the database.
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Run `supabase/schema.sql` in a new Supabase project, then run `supabase/migrations/202610230001_secure_checkout.sql` in the SQL Editor.
 
-## Selar checkout
+## Payment setup
 
-Create real products in Selar and configure the relevant `VITE_SELAR_*_URL` values in `.env.local` and in your deployment environment. Test every checkout link before launch. Multi-path combinations and some mentorship combinations need matching product URLs or a dedicated checkout flow. A redirect is not proof of payment.
+1. Configure a Paystack account and start with test keys.
+2. Deploy `create-checkout` normally: `supabase functions deploy create-checkout`.
+3. Deploy the public Paystack webhook without JWT verification (Paystack authenticates the request using its signature): `supabase functions deploy paystack-webhook --no-verify-jwt`.
+4. Set Edge Function secrets: `PAYSTACK_SECRET_KEY`, `SITE_URL`, and Supabase's standard `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Never place Paystack or service-role secrets in frontend variables.
+5. Set Paystack's webhook URL to `https://YOUR_PROJECT.supabase.co/functions/v1/paystack-webhook`.
+6. Test successful, failed, duplicate and mismatched-amount events in test mode. Confirm access is only granted after verified success.
+7. Set Vercel frontend variables and redeploy.
+
+The browser return URL does not grant access. The signed webhook and server-side Paystack verification are the source of truth.
 
 ## Build and deploy
 
@@ -36,16 +48,11 @@ Create real products in Selar and configure the relevant `VITE_SELAR_*_URL` valu
 npm run build
 ```
 
-Deploy to Vercel or Cloudflare Pages with build command `npm run build` and output directory `dist`. Configure the environment variables in the hosting dashboard. This repository has not yet been verified by a production build or deployed.
+Vercel settings: build command `npm run build`, output directory `dist`.
 
-## Security and production checklist
+## Security notes
 
-- Never put a Supabase service-role key in a `VITE_` variable.
-- Review and test row-level security before storing real student data.
-- Add server-side payment verification and trusted order/subscription records.
-- Grant paid course access only after verified payment events.
-- Build and test creator profiles, course moderation, referrals, commission calculation, refund reversals and payout controls before promising those capabilities.
-- Add terms, privacy notice, refund policy, support contact, backups and monitoring.
+Never expose the Supabase service-role key or Paystack secret in a `VITE_` variable. Review RLS using separate test accounts. The code has not been run against the live Supabase project or tested with Paystack credentials; complete the build and test checklist before accepting real payments.
 
 ## License
 
