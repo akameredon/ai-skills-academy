@@ -176,3 +176,47 @@ footer p { max-width: 45%; line-height: 1.6; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+
+/* Guided learning and checkout clarity */
+.learning-steps {
+  display: flex; align-items: center; gap: 14px; padding: 18px 20px; margin: 0 0 18px;
+  border: 1px solid var(--line); border-radius: 14px; background: rgba(13, 28, 46, .62);
+}
+.learning-step { display: flex; align-items: center; gap: 11px; min-width: 0; flex: 1; }
+.learning-step > span {
+  display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px;
+  border-radius: 10px; background: rgba(99,230,212,.12); color: var(--cyan);
+  border: 1px solid rgba(99,230,212,.22); font-size: 13px; font-weight: 800;
+}
+.learning-step b, .learning-step small { display: block; }
+.learning-step b { font-size: 12px; line-height: 1.4; }
+.learning-step small { color: var(--muted); font-size: 10px; line-height: 1.5; margin-top: 3px; }
+.step-connector { width: 20px; height: 1px; background: var(--line-strong); flex: 0 0 20px; }
+.checkout-assurance {
+  display: flex; gap: 10px; align-items: flex-start; padding: 13px;
+  border: 1px solid rgba(99,230,212,.18); border-radius: 10px;
+  background: rgba(99,230,212,.045); margin-top: 8px;
+}
+.checkout-assurance > svg { color: var(--cyan); flex: none; margin-top: 2px; }
+.checkout-assurance b, .checkout-assurance small { display: block; }
+.checkout-assurance b { font-size: 11px; color: #e8f8f5; }
+.checkout-assurance small { font-size: 10px; line-height: 1.65; margin-top: 4px; }
+.dashboard-action { margin-top: 12px; width: fit-content; }
+.path { min-height: 220px; }
+.path:focus-visible { outline-offset: 3px; }
+.path[aria-pressed="true"] h3 { color: var(--cyan); }
+.total { min-width: 0; }
+.total .button { min-height: 48px; }
+.selection-hint { color: #d4e3f3 !important; }
+.message { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .learning-steps { align-items: stretch; flex-direction: column; gap: 12px; padding: 16px; }
+  .learning-step { flex: initial; }
+  .step-connector { width: 1px; height: 12px; margin-left: 15px; flex: 0 0 12px; }
+  .dashboard-action { width: 100%; }
+}
+@media (max-width: 480px) {
+  .learning-step small { font-size: 11px; }
+  .checkout-assurance { padding: 11px; }
+}
