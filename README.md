@@ -2,21 +2,20 @@
 
 Responsive React/Vite learning academy with five AI learning pathways, Supabase authentication, server-calculated checkout pricing and Paystack checkout integration.
 
-## Included in this update
+## Included
 
 - Five selectable pathways and optional Mentorship Plus.
-- Shared pricing rules: NGN 5,000 foundation + NGN 5,000 per selected pathway + NGN 10,000 mentorship.
+- Current pricing: NGN 5,000 per selected specialist pathway and NGN 10,000 for optional Mentorship Plus. There is no foundation/base fee.
+- Each verified purchase grants 365 days of access to the purchased pathways; no automatic renewal.
 - Supabase email sign-up/sign-in and saved member selections.
 - Supabase Edge Function authenticates the member, calculates the amount on the server, creates an order and initializes Paystack checkout.
 - Webhook validates Paystack's HMAC signature, independently verifies the transaction with Paystack, and calls a database function that checks reference/amount and grants access idempotently.
 - Row-level security on orders, payment records and pathway access.
-- Verified payments grant 30 days of access; another successful payment extends access by 30 days.
+- Responsive interface with accessible focus states, a mobile navigation menu, reduced-motion support, and clearer selection/checkout feedback.
 
-## Launch limitations
+## Marketplace status
 
-**Not production-ready until the configuration and tests below are completed.** No real/test payment was run as part of this code change. Checkout is a one-time payment for a 30-day access period and does **not** automatically renew. Refund/reversal automation, auto-renewing subscriptions, course-content delivery, admin tools, creator publishing, affiliate tracking and payouts are not implemented.
-
-Pricing currently means NGN 5,000 foundation + NGN 5,000 per selected pathway + NGN 10,000 mentorship. Confirm this rule before launch.
+Course creators, referral tracking, commissions, creator publishing and payouts are not implemented. The current creator/partner section describes intended future capabilities, not active features. Course-content delivery and admin tools also require implementation.
 
 ## Local setup
 
@@ -33,7 +32,7 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Run `supabase/schema.sql` 
 ## Payment setup
 
 1. Configure a Paystack account and start with test keys.
-2. Deploy `create-checkout` normally: `supabase functions deploy create-checkout`.
+2. Deploy `create-checkout`: `supabase functions deploy create-checkout`.
 3. Deploy the public Paystack webhook without JWT verification (Paystack authenticates the request using its signature): `supabase functions deploy paystack-webhook --no-verify-jwt`.
 4. Set Edge Function secrets: `PAYSTACK_SECRET_KEY`, `SITE_URL`, and Supabase's standard `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Never place Paystack or service-role secrets in frontend variables.
 5. Set Paystack's webhook URL to `https://YOUR_PROJECT.supabase.co/functions/v1/paystack-webhook`.
@@ -52,7 +51,7 @@ Vercel settings: build command `npm run build`, output directory `dist`.
 
 ## Security notes
 
-Never expose the Supabase service-role key or Paystack secret in a `VITE_` variable. Review RLS using separate test accounts. The code has not been run against the live Supabase project or tested with Paystack credentials; complete the build and test checklist before accepting real payments.
+Never expose the Supabase service-role key or Paystack secret in a `VITE_` variable. Review RLS using separate test accounts. Do not accept real payments until the build, authentication, access expiry and payment webhook tests pass.
 
 ## License
 
