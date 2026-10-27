@@ -1,10 +1,10 @@
+'use client';
+
 import React, { useEffect, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { ArrowRight, Sparkles, GraduationCap, Users, Link2, LogOut, CreditCard, ShieldCheck, RefreshCw, Menu, X, Play, ExternalLink } from 'lucide-react';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
 import { PATHWAYS } from './data/pathways.js';
 import { calculateMonthlyPrice, formatNaira, normalizeSelection } from './lib/pricing.js';
-import './styles.css';
 
 const VIDEO_PICKS = [
   { id: '8yqcDL4TmzM', title: 'ChatGPT prompting: get better answers', creator: 'Anson Alexander', category: 'prompting', tag: 'Prompting', duration: 'About 7 minutes', views: '176K+ views when researched', description: 'Learn how to structure prompts, improve instructions and personalize ChatGPT for everyday work.', pathway: 'prompting' },
@@ -146,4 +146,4 @@ function App() {
     <footer><a className="brand" href="#home"><span className="mark"><Sparkles/></span><span>AI SKILLS <b>ACADEMY</b><small>Learn · Build · Grow</small></span></a><div className="footer-trust"><a href="#faq">Pricing & FAQs</a><a href="#video-library">Video previews</a><span>Clear prices · No auto-renewal</span></div><p>© {new Date().getFullYear()} AI Skills Academy. Learn by building.</p></footer>
   </div>;
 }
-createRoot(document.getElementById('root')).render(<App />);
+export default App;
